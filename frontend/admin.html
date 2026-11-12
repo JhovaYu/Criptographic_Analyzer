@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración - Seguridad App</title>
+    <meta name="description" content="Dashboard administrativo">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">Administración - Seguridad App</div>
+        <div style="display: flex; gap: 1rem;">
+            <button class="btn" style="padding: 0.5rem 1rem; width: auto; background-color: var(--primary-color);" onclick="openPasswordModal()">Cambiar Contraseña</button>
+            <button id="logoutBtn" class="btn" style="padding: 0.5rem 1rem; width: auto; background-color: transparent; border: 1px solid var(--border-color);">Cerrar Sesión</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="alert-box"></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('usuarios')">Gestión de Usuarios</button>
+            <button class="tab-btn" onclick="switchTab('roles')">Gestión de Roles</button>
+            <button class="tab-btn" onclick="switchTab('auditoria')">Bitácora de Auditoría</button>
+        </div>
+
+        <!-- TAB: USUARIOS -->
+        <div id="tab-usuarios" class="tab-content active">
+            <div class="card">
+                <div class="card-header">
+                    <h2 style="font-size: 1.25rem;">Usuarios Registrados</h2>
+                </div>
+                <div class="table-responsive">
+                    <table id="usersTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Correo</th>
+                                <th>Roles Asignados</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="5" style="text-align: center; color: var(--text-muted);">Cargando usuarios...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: ROLES -->
+        <div id="tab-roles" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 style="font-size: 1.25rem;">Crear Nuevo Rol</h2>
+                </div>
+                <div class="card-body" style="padding: 1.5rem;">
+                    <form id="createRoleForm">
+                        <div class="form-group">
+                            <label for="newRoleName">Nombre del Rol</label>
+                            <input type="text" id="newRoleName" class="form-control" placeholder="Ej. Invitado" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Permisos Iniciales</label>
+                            <div class="role-checkbox-group">
+                                <input type="checkbox" id="perm_read" value="1"> <label for="perm_read">Leer Contenido</label>
+                            </div>
+                            <div class="role-checkbox-group">
+                                <input type="checkbox" id="perm_write" value="2"> <label for="perm_write">Escribir Contenido</label>
+                            </div>
+                            <div class="role-checkbox-group">
+                                <input type="checkbox" id="perm_delete" value="3"> <label for="perm_delete">Eliminar Contenido</label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" style="width: auto;">Guardar Rol</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: AUDITORIA -->
+        <div id="tab-auditoria" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 style="font-size: 1.25rem;">Bitácora de Auditoría</h2>
+                    <button class="btn" style="width: auto; padding: 0.5rem 1rem;" onclick="loadAuditLogs()">Actualizar</button>
+                </div>
+                <div class="table-responsive">
+                    <table id="auditTable">
+                        <thead>
+                            <tr>
+                                <th>Fecha/Hora</th>
+                                <th>Usuario</th>
+                                <th>IP</th>
+                                <th>Acción</th>
+                                <th>Detalles</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="5" style="text-align: center; color: var(--text-muted);">Cargando bitácora...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE ROLES -->
+    <div id="roleModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Gestionar Roles</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 1rem; color: var(--text-muted);">Selecciona los roles para este usuario.</p>
+                <div id="modalAlert"></div>
+                <input type="hidden" id="currentUserId">
+                
+                <!-- Los roles reales en este sistema -->
+                <div class="role-checkbox-group">
+                    <input type="checkbox" id="role_admin" value="1">
+                    <label for="role_admin">Administrador</label>
+                </div>
+                <div class="role-checkbox-group">
+                    <input type="checkbox" id="role_editor" value="2">
+                    <label for="role_editor">Editor</label>
+                </div>
+                <div class="role-checkbox-group">
+                    <input type="checkbox" id="role_user" value="3">
+                    <label for="role_user">Usuario Regular</label>
+                </div>
+
+                <button class="btn" style="margin-top: 1.5rem;" onclick="saveRoles()">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CAMBIO DE CONTRASEÑA -->
+    <div id="passwordModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Cambiar Contraseña</h3>
+                <button class="modal-close" onclick="closePasswordModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="passwordAlert"></div>
+                <form id="passwordForm">
+                    <div class="form-group">
+                        <label for="oldPassword">Contraseña Actual</label>
+                        <input type="password" id="oldPassword" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">Nueva Contraseña</label>
+                        <input type="password" id="newPassword" class="form-control" required minlength="5">
+                    </div>
+                    <button type="submit" class="btn" style="margin-top: 1rem;">Actualizar Contraseña</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script>
+        // Proteger ruta
+        if (!API.getToken()) {
+            window.location.href = 'index.html';
+        }
+
+        // --- Manejo Modal Contraseña ---
+        function openPasswordModal() {
+            document.getElementById('passwordForm').reset();
+            document.getElementById('passwordAlert').innerHTML = '';
+            document.getElementById('passwordModal').style.display = 'flex';
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').style.display = 'none';
+        }
+
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const oldPassword = document.getElementById('oldPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const btn = e.target.querySelector('button');
+            const alertBox = document.getElementById('passwordAlert');
+            
+            btn.disabled = true;
+            btn.textContent = 'Actualizando...';
+            
+            try {
+                const res = await API.request('/password/change', 'POST', { old_password: oldPassword, new_password: newPassword });
+                alertBox.innerHTML = `<div class="alert-success" style="display:block; padding:0.5rem; margin-bottom:1rem; border-radius:0.25rem;">${res.message}</div>`;
+                setTimeout(() => closePasswordModal(), 2000);
+            } catch(err) {
+                alertBox.innerHTML = `<div class="alert-error" style="display:block; padding:0.5rem; margin-bottom:1rem; border-radius:0.25rem;">${err.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Actualizar Contraseña';
+            }
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            API.clearToken();
+            window.location.href = 'index.html';
+        });
+
+        // Tabs Logic
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+
+            if (tabId === 'auditoria') loadAuditLogs();
+        }
+
+        function showAlert(msg, isError = false) {
+            const alertBox = document.getElementById('alert-box');
+            alertBox.className = isError ? 'alert-error' : 'alert-success';
+            alertBox.textContent = msg;
+            alertBox.style.display = 'block';
+            setTimeout(() => { alertBox.style.display = 'none'; }, 4000);
+        }
+
+        // --- Gestión de Usuarios ---
+        let allUsers = [];
+
+        async function loadUsers() {
+            const tbody = document.querySelector('#usersTable tbody');
+            try {
+                const response = await API.request('/admin/users', 'GET');
+                allUsers = response.data;
+                tbody.innerHTML = '';
+                
+                if (allUsers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No hay usuarios registrados.</td></tr>';
+                    return;
+                }
+
+                allUsers.forEach(user => {
+                    const tr = document.createElement('tr');
+                    const rolesHtml = user.roles.map(r => `<span class="badge">${r}</span>`).join(' ');
+                    
+                    tr.innerHTML = `
+                        <td>#${user.id}</td>
+                        <td>${user.name}</td>
+                        <td>${user.email}</td>
+                        <td>${rolesHtml}</td>
+                        <td>
+                            <button class="btn" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem;" onclick="openRoleModal(${user.id})">Gestionar Roles</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                showAlert('Error al cargar usuarios: ' + err.message, true);
+                if(err.message.includes('No autorizado')) setTimeout(() => window.location.href = 'index.html', 2000);
+            }
+        }
+
+        // --- Modal de Roles ---
+        function openRoleModal(userId) {
+            const user = allUsers.find(u => u.id === userId);
+            if (!user) return;
+
+            document.getElementById('currentUserId').value = userId;
+            document.getElementById('modalTitle').textContent = `Roles de ${user.name}`;
+            
+            // Setear checkboxes según lo que tiene
+            document.getElementById('role_admin').checked = user.roles.includes('Administrador');
+            document.getElementById('role_editor').checked = user.roles.includes('Editor');
+            document.getElementById('role_user').checked = user.roles.includes('Usuario Regular');
+
+            document.getElementById('roleModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('roleModal').style.display = 'none';
+        }
+
+        async function saveRoles() {
+            const userId = parseInt(document.getElementById('currentUserId').value);
+            const user = allUsers.find(u => u.id === userId);
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
+
+            const roleMap = [
+                { id: 1, name: 'Administrador', checkbox: document.getElementById('role_admin') },
+                { id: 2, name: 'Editor', checkbox: document.getElementById('role_editor') },
+                { id: 3, name: 'Usuario Regular', checkbox: document.getElementById('role_user') }
+            ];
+
+            try {
+                // Hacer assign/revoke según corresponda
+                for (let r of roleMap) {
+                    const hasRoleNow = user.roles.includes(r.name);
+                    const shouldHaveRole = r.checkbox.checked;
+
+                    if (shouldHaveRole && !hasRoleNow) {
+                        await API.request('/admin/roles/assign', 'POST', { user_id: userId, role_id: r.id });
+                    } else if (!shouldHaveRole && hasRoleNow) {
+                        await API.request('/admin/roles/revoke', 'POST', { user_id: userId, role_id: r.id });
+                    }
+                }
+                closeModal();
+                showAlert('Roles actualizados correctamente.');
+                loadUsers(); // Recargar la tabla
+            } catch (err) {
+                const modalAlert = document.getElementById('modalAlert');
+                modalAlert.innerHTML = `<div class="alert-error" style="display:block; margin-bottom:1rem; padding:0.5rem; border-radius:0.25rem;">${err.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Guardar Cambios';
+            }
+        }
+
+        // --- Bitácora de Auditoría ---
+        async function loadAuditLogs() {
+            const tbody = document.querySelector('#auditTable tbody');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Cargando bitácora...</td></tr>';
+            try {
+                const response = await API.request('/admin/audit-logs', 'GET');
+                const logs = response.data;
+                tbody.innerHTML = '';
+                
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No hay registros de auditoría.</td></tr>';
+                    return;
+                }
+
+                logs.forEach(log => {
+                    const tr = document.createElement('tr');
+                    const detailsStr = log.details ? JSON.stringify(log.details) : '-';
+                    const userName = log.user_name || 'Sistema/Anónimo';
+                    tr.innerHTML = `
+                        <td><small style="color:var(--text-muted)">${log.created_at}</small></td>
+                        <td><strong>${userName}</strong></td>
+                        <td>${log.ip_address}</td>
+                        <td>${log.action}</td>
+                        <td><small style="color:var(--text-muted)">${detailsStr}</small></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                showAlert('Error al cargar la bitácora: ' + err.message, true);
+            }
+        }
+
+        // --- Creación de Roles ---
+        document.getElementById('createRoleForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            const name = document.getElementById('newRoleName').value;
+            
+            const permissions = [];
+            if(document.getElementById('perm_read').checked) permissions.push(1);
+            if(document.getElementById('perm_write').checked) permissions.push(2);
+            if(document.getElementById('perm_delete').checked) permissions.push(3);
+
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
+
+            try {
+                await API.request('/admin/roles', 'POST', { name, permissions });
+                showAlert('Rol creado exitosamente con sus permisos.');
+                e.target.reset();
+            } catch (err) {
+                showAlert('Error al crear rol: ' + err.message, true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Guardar Rol';
+            }
+        });
+
+        // Init
+        loadUsers();
+    </script>
+</body>
+</html>

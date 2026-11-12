@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentos Confidenciales - Seguridad App</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .doc-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .doc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .doc-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .doc-meta {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">Documentos Seguros</div>
+        <div style="display: flex; gap: 1rem;">
+            <button id="adminBtn" class="btn" style="display: none; padding: 0.5rem 1rem; width: auto;" onclick="window.location.href='admin.html'">Panel Admin</button>
+            <button id="logoutBtn" class="btn" style="padding: 0.5rem 1rem; width: auto; background-color: transparent; border: 1px solid var(--border-color);">Cerrar Sesión</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="alert-box"></div>
+
+        <div class="card" id="writeSection" style="display: none; margin-bottom: 2rem;">
+            <div class="card-header">
+                <h2>Redactar Nuevo Documento</h2>
+            </div>
+            <div class="card-body" style="padding: 1rem;">
+                <form id="createDocForm">
+                    <div class="form-group">
+                        <label for="docTitle">Título del Documento</label>
+                        <input type="text" id="docTitle" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="docContent">Contenido Confidencial</label>
+                        <textarea id="docContent" class="form-control" rows="4" required></textarea>
+                    </div>
+                    <button type="submit" class="btn" style="width: auto;">Guardar Documento</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Documentos Compartidos</h2>
+                <button class="btn" style="width:auto; padding: 0.5rem;" onclick="loadDocuments()">Recargar</button>
+            </div>
+            <div class="card-body" style="padding: 1rem;" id="docsContainer">
+                <p style="text-align: center; color: var(--text-muted);">Cargando documentos o sin permisos...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script>
+        // Decodificar el token para ver permisos
+        function getPayload() {
+            const token = API.getToken();
+            if (!token) return null;
+            try {
+                return JSON.parse(decodeURIComponent(Array.from(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')), c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')));
+            } catch (e) {
+                return null;
+            }
+        }
+
+        const payload = getPayload();
+        if (!payload) {
+            window.location.href = 'index.html';
+        }
+
+        // Mostrar botón admin si corresponde
+        if (payload?.roles && payload.roles.includes('Administrador')) {
+            document.getElementById('adminBtn').style.display = 'block';
+        }
+
+        const canRead = (payload?.permissions || []).includes('read_content');
+        const canWrite = (payload?.permissions || []).includes('write_content');
+        const canDelete = (payload?.permissions || []).includes('delete_content');
+
+        if (canWrite) {
+            document.getElementById('writeSection').style.display = 'block';
+        }
+
+        if (!canRead) {
+            document.getElementById('docsContainer').innerHTML = '<div class="alert-error" style="display:block">No tienes permiso (read_content) para ver esta sección.</div>';
+        }
+
+        function showAlert(msg, isError = false) {
+            const alertBox = document.getElementById('alert-box');
+            alertBox.className = isError ? 'alert-error' : 'alert-success';
+            alertBox.textContent = msg;
+            alertBox.style.display = 'block';
+            setTimeout(() => alertBox.style.display = 'none', 4000);
+        }
+
+        async function loadDocuments() {
+            if (!canRead) return;
+            
+            const container = document.getElementById('docsContainer');
+            container.innerHTML = '<p style="text-align: center;">Cargando...</p>';
+
+            try {
+                const res = await API.request('/content', 'GET');
+                container.innerHTML = '';
+                if (res.data.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No hay documentos disponibles.</p>';
+                    return;
+                }
+
+                res.data.forEach(doc => {
+                    const div = document.createElement('div');
+                    div.className = 'doc-card';
+                    
+                    const header = document.createElement('div');
+                    header.className = 'doc-header';
+                    const info = document.createElement('div');
+                    const title = document.createElement('div');
+                    title.className = 'doc-title';
+                    title.textContent = doc.title;
+                    const meta = document.createElement('div');
+                    meta.className = 'doc-meta';
+                    meta.textContent = `Por ${doc.author || 'Desconocido'} - ${doc.created_at}`;
+                    info.append(title, meta);
+                    header.appendChild(info);
+                    if (canDelete) {
+                        const button = document.createElement('button');
+                        button.className = 'btn';
+                        button.style.cssText = 'background: var(--danger-color); padding: .25rem .5rem; width: auto; font-size: .8rem;';
+                        button.textContent = 'Eliminar';
+                        button.addEventListener('click', () => deleteDoc(doc.id));
+                        header.appendChild(button);
+                    }
+                    const status = document.createElement('p');
+                    const statuses = {
+                        valid: 'Firma digital válida: título y contenido verificados.',
+                        invalid: 'Firma digital inválida: el título o el contenido fue alterado.',
+                        error: 'No se pudo descifrar o verificar el documento.',
+                        legacy: 'Documento anterior: guardado sin cifrado ni firma.'
+                    };
+                    status.textContent = statuses[doc.signature_status] || 'Estado de firma desconocido.';
+                    status.style.color = doc.signature_status === 'valid' ? '#32ba83' : '#e99c5a';
+                    const content = document.createElement('div');
+                    content.style.whiteSpace = 'pre-wrap';
+                    content.textContent = doc.content ?? 'Contenido no disponible.';
+                    div.append(header, status, content);
+                    container.appendChild(div);
+                });
+            } catch (err) {
+                container.textContent = `Error: ${err.message}`;
+            }
+        }
+
+        document.getElementById('createDocForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            const title = document.getElementById('docTitle').value;
+            const content = document.getElementById('docContent').value;
+            
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
+
+            try {
+                await API.request('/content', 'POST', { title, content });
+                showAlert('Documento creado correctamente.');
+                e.target.reset();
+                loadDocuments();
+            } catch (err) {
+                showAlert(err.message, true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Guardar Documento';
+            }
+        });
+
+        async function deleteDoc(id) {
+            if(!confirm('¿Estás seguro de eliminar este documento?')) return;
+            try {
+                await API.request(`/content/${id}`, 'DELETE');
+                showAlert('Documento eliminado.');
+                loadDocuments();
+            } catch (err) {
+                showAlert(err.message, true);
+            }
+        }
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            API.clearToken();
+            window.location.href = 'index.html';
+        });
+
+        // Iniciar
+        if (canRead) {
+            loadDocuments();
+        }
+    </script>
+</body>
+</html>

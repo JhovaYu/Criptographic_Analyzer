@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restablecer Contraseña - Seguridad App</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Restablecer Contraseña</h1>
+                <p id="resetMessage">Ingresa tu nueva contraseña para la cuenta.</p>
+            </div>
+            
+            <div id="alert-box"></div>
+
+            <form id="resetForm">
+                <input type="hidden" id="token">
+                <input type="hidden" id="email">
+                <div class="form-group">
+                    <label for="newPassword">Nueva Contraseña</label>
+                    <input type="password" id="newPassword" class="form-control" required minlength="5">
+                </div>
+                <button type="submit" class="btn">Restablecer Contraseña</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script>
+        // Obtener parámetros de la URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        const email = urlParams.get('email');
+
+        if (!token || !email) {
+            document.getElementById('resetForm').style.display = 'none';
+            const alertBox = document.getElementById('alert-box');
+            alertBox.className = 'alert-error';
+            alertBox.textContent = 'Enlace de restablecimiento inválido o incompleto.';
+            alertBox.style.display = 'block';
+        } else {
+            document.getElementById('token').value = token;
+            document.getElementById('email').value = email;
+            document.getElementById('resetMessage').textContent = `Restableciendo contraseña para: ${email}`;
+        }
+
+        document.getElementById('resetForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            const alertBox = document.getElementById('alert-box');
+
+            const payload = {
+                token: document.getElementById('token').value,
+                email: document.getElementById('email').value,
+                new_password: document.getElementById('newPassword').value
+            };
+
+            btn.disabled = true;
+            btn.textContent = 'Procesando...';
+            alertBox.style.display = 'none';
+
+            try {
+                const res = await API.request('/password/reset', 'POST', payload);
+                alertBox.className = 'alert-success';
+                alertBox.textContent = res.message;
+                alertBox.style.display = 'block';
+                document.getElementById('resetForm').style.display = 'none';
+                
+                // Redirigir a login
+                setTimeout(() => window.location.href = 'index.html', 3000);
+            } catch (err) {
+                alertBox.className = 'alert-error';
+                alertBox.textContent = err.message;
+                alertBox.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Restablecer Contraseña';
+            }
+        });
+    </script>
+</body>
+</html>

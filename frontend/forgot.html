@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperar Contraseña - Seguridad App</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Recuperar Contraseña</h1>
+                <p>Ingresa tu correo para recibir un enlace de recuperación.</p>
+            </div>
+            
+            <div id="alert-box"></div>
+
+            <form id="forgotForm">
+                <div class="form-group">
+                    <label for="email">Correo Electrónico</label>
+                    <input type="email" id="email" class="form-control" required autocomplete="email">
+                </div>
+                <button type="submit" class="btn">Enviar Enlace</button>
+            </form>
+            <p style="text-align: center; margin-top: 1rem;"><a href="index.html" style="color: var(--primary-color); text-decoration: none;">Volver al login</a></p>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script>
+        document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const btn = e.target.querySelector('button');
+            const alertBox = document.getElementById('alert-box');
+
+            btn.disabled = true;
+            btn.textContent = 'Enviando...';
+            alertBox.style.display = 'none';
+
+            try {
+                const res = await API.request('/password/forgot', 'POST', { email });
+                alertBox.className = 'alert-success';
+                alertBox.textContent = res.message;
+                alertBox.style.display = 'block';
+            } catch (err) {
+                alertBox.className = 'alert-error';
+                alertBox.textContent = err.message;
+                alertBox.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Enviar Enlace';
+            }
+        });
+    </script>
+</body>
+</html>
