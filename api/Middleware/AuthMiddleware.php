@@ -5,8 +5,12 @@ use Helpers\JwtHelper;
 
 class AuthMiddleware {
     public static function authenticate() {
-        $headers = apache_request_headers();
-        $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : null;
+        $headers = function_exists('apache_request_headers') ? apache_request_headers() : [];
+        $authHeader = $headers['Authorization']
+            ?? $headers['authorization']
+            ?? $_SERVER['HTTP_AUTHORIZATION']
+            ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+            ?? null;
 
         if (!$authHeader || !preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
             http_response_code(401);

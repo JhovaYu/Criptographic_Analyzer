@@ -11,6 +11,7 @@
     <nav class="navbar">
         <div class="navbar-brand">Administración - Seguridad App</div>
         <div style="display: flex; gap: 1rem;">
+            <button class="btn" style="padding: 0.5rem 1rem; width: auto; background-color: #0284c7;" onclick="window.location.href='content.html'">Ir a Documentos</button>
             <button class="btn" style="padding: 0.5rem 1rem; width: auto; background-color: var(--primary-color);" onclick="openPasswordModal()">Cambiar Contraseña</button>
             <button id="logoutBtn" class="btn" style="padding: 0.5rem 1rem; width: auto; background-color: transparent; border: 1px solid var(--border-color);">Cerrar Sesión</button>
         </div>
@@ -54,6 +55,29 @@
 
         <!-- TAB: ROLES -->
         <div id="tab-roles" class="tab-content">
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div class="card-header">
+                    <h2 style="font-size: 1.25rem;">Roles Existentes y Asignación Dinámica de Permisos</h2>
+                </div>
+                <div class="table-responsive">
+                    <table id="rolesTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Rol</th>
+                                <th>Permisos Activos (Lectura / Escritura / Eliminación / Admin)</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: var(--text-muted);">Cargando roles...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-header">
                     <h2 style="font-size: 1.25rem;">Crear Nuevo Rol</h2>
@@ -62,18 +86,24 @@
                     <form id="createRoleForm">
                         <div class="form-group">
                             <label for="newRoleName">Nombre del Rol</label>
-                            <input type="text" id="newRoleName" class="form-control" placeholder="Ej. Invitado" required>
+                            <input type="text" id="newRoleName" class="form-control" placeholder="Ej. Auditor" required>
                         </div>
                         <div class="form-group">
                             <label>Permisos Iniciales</label>
                             <div class="role-checkbox-group">
-                                <input type="checkbox" id="perm_read" value="1"> <label for="perm_read">Leer Contenido</label>
+                                <input type="checkbox" id="perm_read" value="1"> <label for="perm_read">Leer Contenido (read_content)</label>
                             </div>
                             <div class="role-checkbox-group">
-                                <input type="checkbox" id="perm_write" value="2"> <label for="perm_write">Escribir Contenido</label>
+                                <input type="checkbox" id="perm_write" value="2"> <label for="perm_write">Escribir/Editar Contenido (write_content)</label>
                             </div>
                             <div class="role-checkbox-group">
-                                <input type="checkbox" id="perm_delete" value="3"> <label for="perm_delete">Eliminar Contenido</label>
+                                <input type="checkbox" id="perm_delete" value="3"> <label for="perm_delete">Eliminar Contenido (delete_content)</label>
+                            </div>
+                            <div class="role-checkbox-group">
+                                <input type="checkbox" id="perm_users" value="4"> <label for="perm_users">Gestionar Usuarios (manage_users)</label>
+                            </div>
+                            <div class="role-checkbox-group">
+                                <input type="checkbox" id="perm_roles" value="5"> <label for="perm_roles">Gestionar Roles (manage_roles)</label>
                             </div>
                         </div>
                         <button type="submit" class="btn" style="width: auto;">Guardar Rol</button>
@@ -123,21 +153,10 @@
                 <div id="modalAlert"></div>
                 <input type="hidden" id="currentUserId">
                 
-                <!-- Los roles reales en este sistema -->
-                <div class="role-checkbox-group">
-                    <input type="checkbox" id="role_admin" value="1">
-                    <label for="role_admin">Administrador</label>
-                </div>
-                <div class="role-checkbox-group">
-                    <input type="checkbox" id="role_editor" value="2">
-                    <label for="role_editor">Editor</label>
-                </div>
-                <div class="role-checkbox-group">
-                    <input type="checkbox" id="role_user" value="3">
-                    <label for="role_user">Usuario Regular</label>
-                </div>
+                <!-- Contenedor dinámico de roles desde la BD -->
+                <div id="dynamicRoleCheckboxes"></div>
 
-                <button class="btn" style="margin-top: 1.5rem;" onclick="saveRoles()">Guardar Cambios</button>
+                <button class="btn" style="margin-top: 1.5rem;" onclick="saveRoles(event)">Guardar Cambios</button>
             </div>
         </div>
     </div>
@@ -220,6 +239,7 @@
             document.getElementById(`tab-${tabId}`).classList.add('active');
 
             if (tabId === 'auditoria') loadAuditLogs();
+            if (tabId === 'roles') loadRolesCatalog();
         }
 
         function showAlert(msg, isError = false) {
@@ -230,8 +250,65 @@
             setTimeout(() => { alertBox.style.display = 'none'; }, 4000);
         }
 
-        // --- Gestión de Usuarios ---
+        // --- Gestión de Usuarios y Roles Dinámicos ---
         let allUsers = [];
+        let allRolesCatalog = [];
+        let allPermissionsCatalog = [];
+
+        async function loadRolesCatalog() {
+            try {
+                const res = await API.request('/admin/roles', 'GET');
+                allRolesCatalog = res.data || [];
+                allPermissionsCatalog = res.permissions || [];
+                renderRolesTable();
+            } catch (err) {
+                console.error('Error cargando catálogo de roles:', err);
+            }
+        }
+
+        function renderRolesTable() {
+            const tbody = document.querySelector('#rolesTable tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            allRolesCatalog.forEach(role => {
+                const tr = document.createElement('tr');
+                const activePermIds = (role.permissions || []).map(p => Number(p.id));
+                const checksHtml = allPermissionsCatalog.map(p => {
+                    const checked = activePermIds.includes(Number(p.id)) ? 'checked' : '';
+                    return `<label style="display:inline-flex; align-items:center; gap:0.35rem; margin-right:1rem; font-size:0.85rem; cursor:pointer;">
+                        <input type="checkbox" class="role-perm-check-${role.id}" value="${p.id}" ${checked}>
+                        ${p.name}
+                    </label>`;
+                }).join('');
+
+                tr.innerHTML = `
+                    <td>#${role.id}</td>
+                    <td><strong>${role.name}</strong></td>
+                    <td>${checksHtml}</td>
+                    <td>
+                        <button class="btn" style="padding: 0.35rem 0.75rem; width: auto; font-size: 0.8rem;" onclick="saveRolePermissions(${role.id}, this)">Guardar Permisos</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function saveRolePermissions(roleId, btn) {
+            const checks = document.querySelectorAll(`.role-perm-check-${roleId}:checked`);
+            const permissions = Array.from(checks).map(c => Number(c.value));
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
+            try {
+                await API.request(`/admin/roles/${roleId}/permissions`, 'PUT', { permissions });
+                showAlert('Permisos del rol actualizados correctamente.');
+                await loadRolesCatalog();
+            } catch (err) {
+                showAlert('Error al actualizar permisos: ' + err.message, true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Guardar Permisos';
+            }
+        }
 
         async function loadUsers() {
             const tbody = document.querySelector('#usersTable tbody');
@@ -267,17 +344,30 @@
         }
 
         // --- Modal de Roles ---
-        function openRoleModal(userId) {
+        async function openRoleModal(userId) {
             const user = allUsers.find(u => u.id === userId);
             if (!user) return;
 
+            if (allRolesCatalog.length === 0) {
+                await loadRolesCatalog();
+            }
+
             document.getElementById('currentUserId').value = userId;
             document.getElementById('modalTitle').textContent = `Roles de ${user.name}`;
-            
-            // Setear checkboxes según lo que tiene
-            document.getElementById('role_admin').checked = user.roles.includes('Administrador');
-            document.getElementById('role_editor').checked = user.roles.includes('Editor');
-            document.getElementById('role_user').checked = user.roles.includes('Usuario Regular');
+            document.getElementById('modalAlert').innerHTML = '';
+
+            const container = document.getElementById('dynamicRoleCheckboxes');
+            container.innerHTML = '';
+            allRolesCatalog.forEach(r => {
+                const checked = user.roles.includes(r.name) ? 'checked' : '';
+                const div = document.createElement('div');
+                div.className = 'role-checkbox-group';
+                div.innerHTML = `
+                    <input type="checkbox" id="dyn_role_${r.id}" data-role-id="${r.id}" data-role-name="${r.name}" ${checked}>
+                    <label for="dyn_role_${r.id}">${r.name}</label>
+                `;
+                container.appendChild(div);
+            });
 
             document.getElementById('roleModal').style.display = 'flex';
         }
@@ -286,34 +376,31 @@
             document.getElementById('roleModal').style.display = 'none';
         }
 
-        async function saveRoles() {
+        async function saveRoles(e) {
             const userId = parseInt(document.getElementById('currentUserId').value);
             const user = allUsers.find(u => u.id === userId);
-            const btn = event.target;
+            const btn = e ? e.target : document.querySelector('#roleModal .btn');
             btn.disabled = true;
             btn.textContent = 'Guardando...';
 
-            const roleMap = [
-                { id: 1, name: 'Administrador', checkbox: document.getElementById('role_admin') },
-                { id: 2, name: 'Editor', checkbox: document.getElementById('role_editor') },
-                { id: 3, name: 'Usuario Regular', checkbox: document.getElementById('role_user') }
-            ];
+            const checkboxes = document.querySelectorAll('#dynamicRoleCheckboxes input[type="checkbox"]');
 
             try {
-                // Hacer assign/revoke según corresponda
-                for (let r of roleMap) {
-                    const hasRoleNow = user.roles.includes(r.name);
-                    const shouldHaveRole = r.checkbox.checked;
+                for (let cb of checkboxes) {
+                    const roleId = parseInt(cb.getAttribute('data-role-id'));
+                    const roleName = cb.getAttribute('data-role-name');
+                    const hasRoleNow = user.roles.includes(roleName);
+                    const shouldHaveRole = cb.checked;
 
                     if (shouldHaveRole && !hasRoleNow) {
-                        await API.request('/admin/roles/assign', 'POST', { user_id: userId, role_id: r.id });
+                        await API.request('/admin/roles/assign', 'POST', { user_id: userId, role_id: roleId });
                     } else if (!shouldHaveRole && hasRoleNow) {
-                        await API.request('/admin/roles/revoke', 'POST', { user_id: userId, role_id: r.id });
+                        await API.request('/admin/roles/revoke', 'POST', { user_id: userId, role_id: roleId });
                     }
                 }
                 closeModal();
                 showAlert('Roles actualizados correctamente.');
-                loadUsers(); // Recargar la tabla
+                loadUsers();
             } catch (err) {
                 const modalAlert = document.getElementById('modalAlert');
                 modalAlert.innerHTML = `<div class="alert-error" style="display:block; margin-bottom:1rem; padding:0.5rem; border-radius:0.25rem;">${err.message}</div>`;
@@ -365,6 +452,8 @@
             if(document.getElementById('perm_read').checked) permissions.push(1);
             if(document.getElementById('perm_write').checked) permissions.push(2);
             if(document.getElementById('perm_delete').checked) permissions.push(3);
+            if(document.getElementById('perm_users')?.checked) permissions.push(4);
+            if(document.getElementById('perm_roles')?.checked) permissions.push(5);
 
             btn.disabled = true;
             btn.textContent = 'Guardando...';
@@ -373,6 +462,7 @@
                 await API.request('/admin/roles', 'POST', { name, permissions });
                 showAlert('Rol creado exitosamente con sus permisos.');
                 e.target.reset();
+                await loadRolesCatalog();
             } catch (err) {
                 showAlert('Error al crear rol: ' + err.message, true);
             } finally {
@@ -383,6 +473,7 @@
 
         // Init
         loadUsers();
+        loadRolesCatalog();
     </script>
 </body>
 </html>

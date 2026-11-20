@@ -274,10 +274,16 @@ class AuthController {
                 ':expires_at' => $expiresAt
             ]);
 
-            // Crear el enlace
-            // Detectamos si hay subcarpeta base de MAMP a partir del Origin (de forma rudimentaria)
-            $origin = $_SERVER['HTTP_ORIGIN'] ?? 'http://localhost';
-            $resetLink = $origin . "/Caso-Practico-2-Confidencialidad/frontend/reset.html?token=" . $token . "&email=" . urlencode($email);
+            // Crear el enlace dinámico adaptándose al dominio/IP real y subcarpeta si aplica
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = $_SERVER['HTTP_HOST'] ?? '192.168.188.10';
+            $origin = $_SERVER['HTTP_ORIGIN'] ?? ($scheme . '://' . $host);
+            $scriptDir = dirname($_SERVER['SCRIPT_NAME'] ?? '/api/index.php');
+            $basePath = preg_replace('#/api$#', '', str_replace('\\', '/', $scriptDir));
+            if ($basePath === '/' || $basePath === '.') {
+                $basePath = '';
+            }
+            $resetLink = $origin . $basePath . "/frontend/reset.html?token=" . $token . "&email=" . urlencode($email);
 
             $subject = "Recuperación de Contraseña - Seguridad App";
             $message = "<h3>Hola {$user['name']},</h3>
@@ -286,9 +292,18 @@ class AuthController {
                         <p><a href='{$resetLink}'>Restablecer mi contraseña</a></p>
                         <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>";
 
-            \Helpers\SmtpHelper::sendEmail($email, $subject, $message);
+            $sent = \Helpers\SmtpHelper::sendEmail($email, $subject, $message);
             
-            $this->logAudit($user['id'], "Solicitud de restablecimiento de contraseña");
+            $this->logAudit($user['id'], "Solicitud de restablecimiento de contraseña", ["smtp_sent" => $sent]);
+
+            if (!$sent) {
+                http_response_code(200);
+                echo json_encode([
+                    "message" => "Solicitud generada. (Modo Laboratorio sin SMTP externo: usa el enlace directo de recuperación).",
+                    "debug_reset_link" => $resetLink
+                ]);
+                return;
+            }
         }
 
         // Siempre devolvemos 200 aunque no exista, para evitar enumeración de usuarios

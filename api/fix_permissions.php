@@ -26,16 +26,16 @@ try {
     $perms = [];
     while ($p = $stmt->fetch(\PDO::FETCH_ASSOC)) { $perms[$p['name']] = $p['id']; }
 
-    // Asignar a Editor: read_content, write_content
+    // Asignar a Editor: read_content, write_content, delete_content
     if (isset($roles['Editor'])) {
         $rId = $roles['Editor'];
-        foreach (['read_content', 'write_content'] as $p) {
+        foreach (['read_content', 'write_content', 'delete_content'] as $p) {
             if (isset($perms[$p])) {
                 $q = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING");
                 $q->execute([$rId, $perms[$p]]);
             }
         }
-        echo "<p>✔️ Permisos asignados al Editor.</p>";
+        echo "<p>✔️ Permisos asignados al Editor (lectura, escritura y eliminación).</p>";
     }
 
     // Asignar a Usuario Regular: read_content

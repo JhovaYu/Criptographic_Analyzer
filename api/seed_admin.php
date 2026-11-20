@@ -61,6 +61,23 @@ try {
         }
     }
 
+    // 3b. Asignar permisos predeterminados a Editor y Usuario Regular
+    $stmt = $conn->prepare("
+        INSERT INTO role_permissions (role_id, permission_id)
+        SELECT r.id, p.id FROM roles r, permissions p
+        WHERE r.name = 'Editor' AND p.name IN ('read_content', 'write_content', 'delete_content')
+        ON CONFLICT DO NOTHING
+    ");
+    $stmt->execute();
+
+    $stmt = $conn->prepare("
+        INSERT INTO role_permissions (role_id, permission_id)
+        SELECT r.id, p.id FROM roles r, permissions p
+        WHERE r.name = 'Usuario Regular' AND p.name IN ('read_content')
+        ON CONFLICT DO NOTHING
+    ");
+    $stmt->execute();
+
     // 4. Crear el usuario administrador
     $adminEmail = 'admin@admin.com';
     $adminPassword = 'admin'; // Contraseña por defecto (se hasheará)

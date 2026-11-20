@@ -42,7 +42,11 @@
             try {
                 const res = await API.request('/password/forgot', 'POST', { email });
                 alertBox.className = 'alert-success';
-                alertBox.textContent = res.message;
+                if (res.debug_reset_link) {
+                    alertBox.innerHTML = `${res.message}<br><br><a href="${res.debug_reset_link}" style="color: #6ee7b7; font-weight: bold; text-decoration: underline;">👉 Haz clic aquí para restablecer tu contraseña con el Token generado</a>`;
+                } else {
+                    alertBox.textContent = res.message;
+                }
                 alertBox.style.display = 'block';
             } catch (err) {
                 alertBox.className = 'alert-error';

@@ -12,7 +12,14 @@ use Middleware\AuthMiddleware;
 use Config\Database;
 
 // Manejo seguro de CORS (Restringir dominios autorizados en producción)
-$allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]; // Frontend
+$allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://192.168.188.10",
+    "https://192.168.188.10"
+]; // Frontend
 $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
 if (in_array($origin, $allowed_origins)) {
     header("Access-Control-Allow-Origin: " . $origin);
@@ -89,6 +96,15 @@ if ($route === '/login' && $method === 'POST') {
     $contentController = new \Controllers\ContentController();
     $contentController->createDocument($userPayload['id'], $data);
 
+} elseif (preg_match('/^\/content\/(\d+)$/', $route, $matches) && $method === 'PUT') {
+    $userPayload = AuthMiddleware::authenticate();
+    AuthMiddleware::authorize($userPayload, 'write_content');
+    
+    $data = json_decode(file_get_contents("php://input"));
+    require_once __DIR__ . '/Controllers/ContentController.php';
+    $contentController = new \Controllers\ContentController();
+    $contentController->updateDocument($userPayload['id'], $matches[1], $data);
+
 } elseif (preg_match('/^\/content\/(\d+)$/', $route, $matches) && $method === 'DELETE') {
     $userPayload = AuthMiddleware::authenticate();
     AuthMiddleware::authorize($userPayload, 'delete_content');
@@ -121,6 +137,13 @@ if ($route === '/login' && $method === 'POST') {
     $adminController = new \Controllers\AdminController();
     $adminController->revokeRole($userPayload['id'], $data);
 
+} elseif ($route === '/admin/roles' && $method === 'GET') {
+    $userPayload = AuthMiddleware::authenticate();
+    AuthMiddleware::authorize($userPayload, 'manage_users');
+    
+    $adminController = new \Controllers\AdminController();
+    $adminController->getRoles();
+
 } elseif ($route === '/admin/roles' && $method === 'POST') {
     $userPayload = AuthMiddleware::authenticate();
     AuthMiddleware::authorize($userPayload, 'manage_roles');
@@ -128,6 +151,14 @@ if ($route === '/login' && $method === 'POST') {
     $data = json_decode(file_get_contents("php://input"));
     $adminController = new \Controllers\AdminController();
     $adminController->createRole($userPayload['id'], $data);
+
+} elseif (preg_match('/^\/admin\/roles\/(\d+)\/permissions$/', $route, $matches) && $method === 'PUT') {
+    $userPayload = AuthMiddleware::authenticate();
+    AuthMiddleware::authorize($userPayload, 'manage_roles');
+    
+    $data = json_decode(file_get_contents("php://input"));
+    $adminController = new \Controllers\AdminController();
+    $adminController->updateRolePermissions($userPayload['id'], $matches[1], $data);
 
 } elseif ($route === '/admin/audit-logs' && $method === 'GET') {
     $userPayload = AuthMiddleware::authenticate();

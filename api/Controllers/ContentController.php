@@ -57,6 +57,32 @@ class ContentController {
             echo json_encode(['message' => 'No se pudo guardar el documento. Revisa la configuración criptográfica y la base de datos.']);
         }
     }
+    public function updateDocument($userId, $docId, $data) {
+        $title = trim((string)($data->title ?? ''));
+        $content = (string)($data->content ?? '');
+        if ($title === '' || trim($content) === '' || preg_match_all('/./us', $title) === false || preg_match_all('/./us', $title) > 255) {
+            http_response_code(400);
+            echo json_encode(['message' => 'El título (máximo 255 caracteres) y el contenido son obligatorios.']);
+            return;
+        }
+        try {
+            $ciphertext = DocumentCrypto::encrypt($content);
+            $signature = DocumentCrypto::sign($title, $content);
+            $stmt = $this->conn->prepare('UPDATE documents SET title = :title, content = :content, crypto_version = 1, signature = :signature WHERE id = :id RETURNING id');
+            $stmt->execute([':title' => $title, ':content' => $ciphertext, ':signature' => $signature, ':id' => $docId]);
+            if ($stmt->fetchColumn() === false) {
+                http_response_code(404);
+                echo json_encode(['message' => 'Documento no encontrado.']);
+                return;
+            }
+            $this->logAudit($userId, 'Actualizó un documento', ['doc_id' => (int)$docId, 'title' => $title]);
+            echo json_encode(['message' => 'Documento actualizado, re-cifrado y firmado correctamente.']);
+        } catch (\Throwable $e) {
+            error_log('Error al actualizar documento: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['message' => 'No se pudo actualizar el documento.']);
+        }
+    }
     public function deleteDocument($userId, $docId) {
         $stmt = $this->conn->prepare('DELETE FROM documents WHERE id = :id RETURNING title');
         $stmt->execute([':id' => $docId]);

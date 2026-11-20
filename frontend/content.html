@@ -34,8 +34,10 @@
 <body>
     <nav class="navbar">
         <div class="navbar-brand">Documentos Seguros</div>
-        <div style="display: flex; gap: 1rem;">
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <span id="userBadge" class="badge" style="font-size: 0.85rem;"></span>
             <button id="adminBtn" class="btn" style="display: none; padding: 0.5rem 1rem; width: auto;" onclick="window.location.href='admin.html'">Panel Admin</button>
+            <button class="btn" style="padding: 0.5rem 1rem; width: auto; background-color: var(--primary-color);" onclick="openPasswordModal()">Cambiar Contraseña</button>
             <button id="logoutBtn" class="btn" style="padding: 0.5rem 1rem; width: auto; background-color: transparent; border: 1px solid var(--border-color);">Cerrar Sesión</button>
         </div>
     </nav>
@@ -73,6 +75,55 @@
         </div>
     </div>
 
+    <!-- MODAL DE EDICIÓN DE DOCUMENTO -->
+    <div id="editDocModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Editar Documento Confidencial</h3>
+                <button class="modal-close" onclick="closeEditDocModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="editDocAlert"></div>
+                <form id="editDocForm">
+                    <input type="hidden" id="editDocId">
+                    <div class="form-group">
+                        <label for="editDocTitle">Título del Documento</label>
+                        <input type="text" id="editDocTitle" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editDocContent">Contenido Confidencial (se re-cifrará con AES-256-GCM y firmará con RSA-3072)</label>
+                        <textarea id="editDocContent" class="form-control" rows="5" required></textarea>
+                    </div>
+                    <button type="submit" class="btn" style="margin-top: 1rem;">Guardar y Re-Firmar Documento</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CAMBIO DE CONTRASEÑA -->
+    <div id="passwordModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Cambiar Contraseña</h3>
+                <button class="modal-close" onclick="closePasswordModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="passwordAlert"></div>
+                <form id="passwordForm">
+                    <div class="form-group">
+                        <label for="oldPassword">Contraseña Actual</label>
+                        <input type="password" id="oldPassword" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">Nueva Contraseña</label>
+                        <input type="password" id="newPassword" class="form-control" required minlength="5">
+                    </div>
+                    <button type="submit" class="btn" style="margin-top: 1rem;">Actualizar Contraseña</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="js/api.js"></script>
     <script>
         // Decodificar el token para ver permisos
@@ -91,7 +142,11 @@
             window.location.href = 'index.html';
         }
 
-        // Mostrar botón admin si corresponde
+        // Mostrar rol del usuario y botón admin si corresponde
+        if (payload) {
+            const rolesStr = (payload.roles || []).join(', ') || 'Sin rol';
+            document.getElementById('userBadge').textContent = `${payload.name || payload.email} (${rolesStr})`;
+        }
         if (payload?.roles && payload.roles.includes('Administrador')) {
             document.getElementById('adminBtn').style.display = 'block';
         }
@@ -145,14 +200,27 @@
                     meta.textContent = `Por ${doc.author || 'Desconocido'} - ${doc.created_at}`;
                     info.append(title, meta);
                     header.appendChild(info);
+
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.style.cssText = 'display: flex; gap: 0.5rem;';
+
+                    if (canWrite) {
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'btn';
+                        editBtn.style.cssText = 'background: var(--primary-color); padding: .25rem .6rem; width: auto; font-size: .8rem;';
+                        editBtn.textContent = 'Editar';
+                        editBtn.addEventListener('click', () => openEditDocModal(doc));
+                        actionsDiv.appendChild(editBtn);
+                    }
                     if (canDelete) {
                         const button = document.createElement('button');
                         button.className = 'btn';
-                        button.style.cssText = 'background: var(--danger-color); padding: .25rem .5rem; width: auto; font-size: .8rem;';
+                        button.style.cssText = 'background: var(--danger-color); padding: .25rem .6rem; width: auto; font-size: .8rem;';
                         button.textContent = 'Eliminar';
                         button.addEventListener('click', () => deleteDoc(doc.id));
-                        header.appendChild(button);
+                        actionsDiv.appendChild(button);
                     }
+                    header.appendChild(actionsDiv);
                     const status = document.createElement('p');
                     const statuses = {
                         valid: 'Firma digital válida: título y contenido verificados.',
@@ -209,6 +277,76 @@
         document.getElementById('logoutBtn').addEventListener('click', () => {
             API.clearToken();
             window.location.href = 'index.html';
+        });
+
+        // --- Modal Edición de Documento ---
+        function openEditDocModal(doc) {
+            document.getElementById('editDocId').value = doc.id;
+            document.getElementById('editDocTitle').value = doc.title;
+            document.getElementById('editDocContent').value = doc.content ?? '';
+            document.getElementById('editDocAlert').innerHTML = '';
+            document.getElementById('editDocModal').style.display = 'flex';
+        }
+
+        function closeEditDocModal() {
+            document.getElementById('editDocModal').style.display = 'none';
+        }
+
+        document.getElementById('editDocForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const docId = document.getElementById('editDocId').value;
+            const title = document.getElementById('editDocTitle').value;
+            const content = document.getElementById('editDocContent').value;
+            const btn = e.target.querySelector('button');
+            const alertBox = document.getElementById('editDocAlert');
+
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
+
+            try {
+                const res = await API.request(`/content/${docId}`, 'PUT', { title, content });
+                closeEditDocModal();
+                showAlert(res.message || 'Documento actualizado correctamente.');
+                loadDocuments();
+            } catch (err) {
+                alertBox.innerHTML = `<div class="alert-error" style="display:block; padding:0.5rem; margin-bottom:1rem; border-radius:0.25rem;">${err.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Guardar y Re-Firmar Documento';
+            }
+        });
+
+        // --- Modal Cambio de Contraseña ---
+        function openPasswordModal() {
+            document.getElementById('passwordForm').reset();
+            document.getElementById('passwordAlert').innerHTML = '';
+            document.getElementById('passwordModal').style.display = 'flex';
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').style.display = 'none';
+        }
+
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const oldPassword = document.getElementById('oldPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const btn = e.target.querySelector('button');
+            const alertBox = document.getElementById('passwordAlert');
+            
+            btn.disabled = true;
+            btn.textContent = 'Actualizando...';
+            
+            try {
+                const res = await API.request('/password/change', 'POST', { old_password: oldPassword, new_password: newPassword });
+                alertBox.innerHTML = `<div class="alert-success" style="display:block; padding:0.5rem; margin-bottom:1rem; border-radius:0.25rem;">${res.message}</div>`;
+                setTimeout(() => closePasswordModal(), 2000);
+            } catch(err) {
+                alertBox.innerHTML = `<div class="alert-error" style="display:block; padding:0.5rem; margin-bottom:1rem; border-radius:0.25rem;">${err.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Actualizar Contraseña';
+            }
         });
 
         // Iniciar

@@ -128,7 +128,64 @@ class AdminController {
         }
     }
 
-    // 4. Crear nuevo rol y asignarle permisos
+    // 4. Listar todos los roles con sus permisos
+    public function getRoles() {
+        $rolesQuery = "
+            SELECT r.id, r.name, r.description,
+                   COALESCE(json_agg(json_build_object('id', p.id, 'name', p.name, 'description', p.description)) FILTER (WHERE p.id IS NOT NULL), '[]') as permissions
+            FROM roles r
+            LEFT JOIN role_permissions rp ON r.id = rp.role_id
+            LEFT JOIN permissions p ON rp.permission_id = p.id
+            GROUP BY r.id
+            ORDER BY r.id ASC
+        ";
+        $stmt = $this->conn->prepare($rolesQuery);
+        $stmt->execute();
+        $roles = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $row['permissions'] = json_decode($row['permissions'], true);
+            $roles[] = $row;
+        }
+
+        $permStmt = $this->conn->query("SELECT id, name, description FROM permissions ORDER BY id ASC");
+        $allPermissions = $permStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        http_response_code(200);
+        echo json_encode(["data" => $roles, "permissions" => $allPermissions]);
+    }
+
+    // 4b. Actualizar permisos de un rol existente
+    public function updateRolePermissions($adminUserId, $roleId, $data) {
+        $permissions = $data->permissions ?? [];
+        if (!is_array($permissions)) {
+            http_response_code(400);
+            echo json_encode(["message" => "Formato de permisos inválido."]);
+            return;
+        }
+
+        try {
+            $this->conn->beginTransaction();
+            $delStmt = $this->conn->prepare("DELETE FROM role_permissions WHERE role_id = :role_id");
+            $delStmt->execute([':role_id' => $roleId]);
+
+            if (!empty($permissions)) {
+                $insStmt = $this->conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :permission_id)");
+                foreach ($permissions as $permId) {
+                    $insStmt->execute([':role_id' => $roleId, ':permission_id' => (int)$permId]);
+                }
+            }
+            $this->conn->commit();
+            $this->logAudit($adminUserId, "Actualizó permisos de rol", ["role_id" => (int)$roleId, "permissions" => $permissions]);
+            http_response_code(200);
+            echo json_encode(["message" => "Permisos del rol actualizados correctamente."]);
+        } catch (\Exception $e) {
+            $this->conn->rollBack();
+            http_response_code(500);
+            echo json_encode(["message" => "Error al actualizar los permisos del rol."]);
+        }
+    }
+
+    // 4c. Crear nuevo rol y asignarle permisos
     public function createRole($adminUserId, $data) {
         $name = htmlspecialchars(strip_tags($data->name ?? ''));
         $description = htmlspecialchars(strip_tags($data->description ?? ''));
